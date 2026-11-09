@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+</head>
+<body>
+<title>MH Crisis Simulator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: OR patient monitor on the left, team channel and the current call on the right. Monitor dark, single theme by design. */
+:root{
+  --bg:#0b1417;--panel:#122126;--panel2:#182b31;--line:#27424a;
+  --ink:#e4eee9;--muted:#8fa7a1;
+  --ecg:#5ee08a;--pleth:#4fd1e8;--co2:#f2c94c;--art:#ff7a6b;--temp:#e9e4d4;--agent:#e6a34a;
+  --ok:#46b97f;--bad:#ff6f5e;
+  --display:"Saira Condensed","Arial Narrow",Arial,sans-serif;
+  --body:"Source Sans 3","Segoe UI",Helvetica,Arial,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{background:var(--bg);color:var(--ink)}
+body{font-family:var(--body);font-size:16px;line-height:1.45;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px 40px}
+h1,h2,h3{font-family:var(--display);font-weight:700;line-height:1.1;margin:0;text-wrap:balance}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--co2);outline-offset:2px}
+.wrap{max-width:1320px;margin:0 auto}
+.label{font-family:var(--display);text-transform:uppercase;letter-spacing:.12em;font-size:12.5px;color:var(--muted);font-weight:600}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.btn{background:var(--co2);color:#1a1608;border:0;border-radius:4px;padding:11px 18px;font-family:var(--display);font-weight:700;font-size:17px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
+.btn:hover{filter:brightness(1.08)}
+.btn:disabled{opacity:.4;cursor:default;filter:none}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn.sm{padding:6px 10px;font-size:14px}
+
+/* Intro */
+#intro{max-width:820px;margin:3vh auto 0;display:grid;gap:22px}
+#intro h1{font-size:clamp(40px,8vw,72px)}
+#intro h1 span{color:var(--art)}
+.brief{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.brief div{border-top:2px solid var(--line);padding-top:8px;display:grid;gap:3px}
+.brief b{font-family:var(--display);font-size:18px;letter-spacing:.02em}
+.intro p{margin:0;max-width:68ch}
+.startrow{display:flex;flex-wrap:wrap;gap:12px;align-items:end;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px}
+.startrow .f{display:grid;gap:6px;flex:1 1 220px;min-width:0}
+input[type=text]{font-family:var(--body);font-size:19px;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:9px 12px;width:100%}
+.best{color:var(--muted);font-size:14px}
+
+/* Sim */
+#sim{display:grid;gap:14px}
+.top{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:10px}
+.top h1{font-size:28px}.top h1 span{color:var(--art)}
+.ro{display:flex;gap:20px;flex-wrap:wrap;align-items:center}
+.ro div{display:grid}
+.ro .v{font-family:var(--mono);font-weight:700;font-size:24px;font-variant-numeric:tabular-nums}
+.ro .v.sc{color:var(--co2)}
+.status{font-family:var(--display);letter-spacing:.1em;text-transform:uppercase;font-size:13px;padding:3px 8px;border-radius:3px;border:1px solid var(--line);color:var(--muted)}
+.status.run{color:var(--ok);border-color:var(--ok)}
+.status.wait{color:var(--co2);border-color:var(--co2)}
+.grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(320px,1fr);gap:16px;align-items:start}
+@media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+
+.monitor{background:#050a0b;border:1px solid var(--line);border-radius:8px;padding:10px;display:grid;grid-template-columns:minmax(0,1fr) 190px;gap:10px;min-width:0}
+@media (max-width:560px){.monitor{grid-template-columns:minmax(0,1fr)}}
+.waves{display:grid;gap:6px;min-width:0}
+.wv{position:relative;border-bottom:1px solid #12201f;min-width:0}
+.wv canvas{display:block;width:100%;height:92px}
+.wv .tag{position:absolute;left:6px;top:3px;font-family:var(--display);font-size:13px;letter-spacing:.08em;font-weight:600}
+.nums{display:grid;grid-template-columns:1fr 1fr;gap:6px;align-content:start}
+@media (max-width:560px){.nums{grid-template-columns:repeat(3,1fr)}}
+.tile{border:1px solid #16272a;border-radius:4px;padding:5px 7px;display:grid;gap:0;min-width:0}
+.tile.wide{grid-column:span 2}
+@media (max-width:560px){.tile.wide{grid-column:span 1}.tile .val{font-size:22px}}
+.tile .n{font-family:var(--display);font-size:12px;letter-spacing:.1em;font-weight:600}
+.tile .val{font-family:var(--mono);font-weight:700;font-size:30px;line-height:1.05;font-variant-numeric:tabular-nums}
+.tile .sub{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.tile.alarm{animation:blink 1s steps(2,start) infinite}
+@keyframes blink{50%{background:color-mix(in srgb,var(--bad) 35%,transparent)}}
+@media (prefers-reduced-motion:reduce){.tile.alarm{animation:none;background:color-mix(in srgb,var(--bad) 30%,transparent)}}
+.c-ecg{color:var(--ecg)}.c-pl{color:var(--pleth)}.c-co2{color:var(--co2)}.c-art{color:var(--art)}.c-t{color:var(--temp)}.c-ag{color:var(--agent)}
+
+.side{display:grid;gap:12px;min-width:0}
+.chan{background:var(--panel);border:1px solid var(--line);border-radius:6px;display:grid;grid-template-rows:auto 1fr;max-height:330px;min-height:180px}
+.chan h3{font-size:15px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:9px 12px;border-bottom:1px solid var(--line)}
+.log{overflow-y:auto;padding:10px 12px;display:grid;gap:8px;align-content:start}
+.msg{display:grid;gap:1px}
+.msg .who{font-family:var(--display);font-weight:700;letter-spacing:.04em;font-size:14px}
+.msg .when{font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:6px;font-weight:500}
+.msg p{margin:0}
+.msg.sys p{color:var(--muted);font-style:italic}
+.who.md{color:var(--art)}.who.crna{color:var(--pleth)}.who.circ{color:var(--ecg)}.who.surg{color:var(--agent)}.who.you{color:var(--co2)}
+
+.call{background:var(--panel2);border:1px solid var(--co2);border-radius:6px;padding:14px;display:grid;gap:12px}
+.call.idle{border-color:var(--line)}
+.call .q{margin:0;font-size:17px}
+.choices{display:grid;gap:7px}
+.ch{display:grid;grid-template-columns:24px 1fr;gap:8px;align-items:start;text-align:left;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:9px 10px;cursor:pointer;line-height:1.35}
+.ch:hover:not(:disabled){border-color:var(--muted)}
+.ch:disabled{cursor:default}
+.ch .box{width:18px;height:18px;border:1.5px solid var(--muted);border-radius:3px;margin-top:1px;display:grid;place-items:center;font-size:13px;font-weight:700}
+.ch.single .box{border-radius:50%}
+.ch.on{border-color:var(--co2)}.ch.on .box{background:var(--co2);border-color:var(--co2);color:#1a1608}
+.ch.good{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 12%,var(--bg))}
+.ch.bad{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 12%,var(--bg))}
+.ch.miss{border-style:dashed;border-color:var(--ok)}
+.ch .pts{font-family:var(--mono);font-size:12px;margin-left:6px;font-weight:700}
+.fb{border-left:3px solid var(--ok);padding:2px 0 2px 10px;display:grid;gap:6px}
+.fb.neg{border-color:var(--bad)}
+.fb p{margin:0}
+.fb .pt{font-family:var(--mono);font-weight:700}
+.toast{font-family:var(--mono);font-weight:700;color:var(--co2)}
+
+/* Debrief */
+#debrief{display:grid;gap:18px;max-width:980px;margin:0 auto}
+#debrief h1{font-size:clamp(36px,6vw,56px)}
+.scorebig{display:flex;flex-wrap:wrap;gap:24px;align-items:end}
+.scorebig .v{font-family:var(--mono);font-size:64px;font-weight:700;color:var(--co2);line-height:1}
+.tl{width:100%;border-collapse:collapse;font-size:15px}
+.tl th,.tl td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.tl th{font-family:var(--display);letter-spacing:.1em;text-transform:uppercase;font-size:12.5px;color:var(--muted)}
+.tl td.p{font-family:var(--mono);font-weight:700;white-space:nowrap;text-align:right}
+.tl td.t{font-family:var(--mono);white-space:nowrap;color:var(--muted)}
+.pos{color:var(--ok)}.neg{color:var(--bad)}
+.tblwrap{overflow-x:auto}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px 16px;display:grid;gap:8px}
+.panel ul{margin:0;padding-left:20px;display:grid;gap:5px}
+</style>
+
+<div class="wrap">
+<!-- ================= INTRO ================= -->
+<section id="intro">
+  <div>
+    <span class="label">ANES 1123 · Malignant hyperthermia scenario · Pilot</span>
+    <h1>MH Crisis <span>Simulator</span></h1>
+  </div>
+  <p>You are the anesthesia technologist assigned to OR 6. The monitor runs live. The team will talk to you, ask what you are seeing, and ask you to act. Every finding you identify and every action you take earns or costs points.</p>
+  <div class="brief">
+    <div><span class="label">Patient</span><b>19 year old male, 82 kg</b><span>Healthy, no known anesthesia history on file. Right ACL reconstruction under general anesthesia.</span></div>
+    <div><span class="label">Induction</span><b>Propofol and succinylcholine</b><span>Intubated, placement confirmed, volume control ventilation, tourniquet not yet inflated.</span></div>
+    <div><span class="label">Your role</span><b>Anesthesia technologist</b><span>Read the monitor, answer the team, run the machine and the MH cart.</span></div>
+    <div><span class="label">Scoring</span><b>Points for accuracy</b><span>Correct findings and actions add points. Wrong ones subtract. Connecting two findings into one conclusion earns bonus points.</span></div>
+  </div>
+  <p>The case clock runs fast: one case minute passes every few seconds. It pauses while the team waits for your answer, so read the monitor carefully before you respond.</p>
+  <form class="startrow" id="startForm" autocomplete="off">
+    <div class="f"><label class="label" for="nameIn">Your name</label><input type="text" id="nameIn" maxlength="40" placeholder="First and last name"></div>
+    <button class="btn" type="submit">Enter OR 6</button>
+  </form>
+  <p class="best" id="bestLine"></p>
+</section>
+
+<!-- ================= SIM ================= -->
+<section id="sim" hidden>
+  <div class="top">
+    <h1>OR 6 · <span>MH Crisis</span></h1>
+    <div class="ro">
+      <div><span class="label">Case time</span><span class="v mono" id="clock">00:00</span></div>
+      <div><span class="label">Score</span><span class="v sc" id="score">0</span></div>
+      <span class="status" id="status">Ready</span>
+      <button class="btn ghost sm" id="speedBtn" type="button">Speed 1×</button>
+    </div>
+  </div>
+  <div class="grid">
+    <div class="monitor" aria-label="Patient monitor">
+      <div class="waves">
+        <div class="wv"><canvas id="cvEcg"></canvas><span class="tag c-ecg">II</span></div>
+        <div class="wv"><canvas id="cvArt"></canvas><span class="tag c-art">ART</span></div>
+        <div class="wv"><canvas id="cvPl"></canvas><span class="tag c-pl">PLETH</span></div>
+        <div class="wv"><canvas id="cvCo2"></canvas><span class="tag c-co2">CO2 · 0 to 80 mmHg</span></div>
+      </div>
+      <div class="nums">
+        <div class="tile c-ecg" id="tHR"><span class="n">HR</span><span class="val" id="vHR">--</span><span class="sub" id="sHR">bpm</span></div>
+        <div class="tile c-pl" id="tSp"><span class="n">SpO2</span><span class="val" id="vSp">--</span><span class="sub">%</span></div>
+        <div class="tile c-art wide" id="tBP"><span class="n">ART mmHg</span><span class="val" id="vBP">--/--</span><span class="sub" id="sBP">(--)</span></div>
+        <div class="tile c-co2" id="tEt"><span class="n">ETCO2</span><span class="val" id="vEt">--</span><span class="sub">mmHg</span></div>
+        <div class="tile c-co2" id="tFi"><span class="n">FiCO2</span><span class="val" id="vFi">--</span><span class="sub" id="sRR">RR --</span></div>
+        <div class="tile c-t" id="tT"><span class="n">T ESO</span><span class="val" id="vT">--</span><span class="sub">°C</span></div>
+        <div class="tile c-ag" id="tAg"><span class="n">SEVO</span><span class="val" id="vAg">--</span><span class="sub" id="sAg">Fi -- · MAC --</span></div>
+        <div class="tile c-pl wide" id="tVent"><span class="n">VENT · FGF</span><span class="val" id="vVent" style="font-size:20px">--</span><span class="sub" id="sVent">--</span></div>
+      </div>
+    </div>
+    <div class="side">
+      <div class="call idle" id="call" aria-live="polite"></div>
+      <div class="chan"><h3>Team channel</h3><div class="log" id="log" aria-live="polite"></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= DEBRIEF ================= -->
+<section id="debrief" hidden></section>
+</div>
+
+<script>
+/* ======================= Utilities ======================= */
+const $=id=>document.getElementById(id);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const fmtT=m=>{const s=Math.floor(m*60);return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')};
+const KG=82;
+
+/* ======================= Patient model ======================= */
+/* mh: severity 0 to ~1. Vitals are derived from mh plus the state of treatment. */
+let M;
+function freshModel(){return{
+  t:0,mh:0,trigger:false,sevoDial:0,agentEt:0,flowHigh:false,hyper:false,filters:false,
+  dantAt:null,cooling:false,temp:36.7,exhaustAt:null,canisterNew:false,fico2:0,kTreated:false,k:4.1,rigid:false}}
+function step(dt){ // dt in case minutes
+  M.t+=dt;
+  // severity
+  const dantOn=M.dantAt!==null&&M.t>=M.dantAt;
+  if(dantOn) M.mh-=0.065*dt;
+  else if(M.trigger) M.mh+=0.07*dt;
+  else if(M.t>0.5) M.mh+=0.025*dt;
+  M.mh=clamp(M.mh,0,1.1);
+  // agent
+  const target=M.trigger?M.sevoDial:0;
+  const tau=M.trigger?2.2:(M.filters?0.6:(M.flowHigh?1.5:5));
+  M.agentEt+=(target-M.agentEt)*(1-Math.exp(-dt/tau));
+  // temperature: lags behind severity
+  M.temp+=0.8*Math.max(0,M.mh-0.3)*dt-(M.cooling?0.24*dt:0)+(M.temp<36.6?0.02*dt:0);
+  M.temp=clamp(M.temp,35.2,41.5);
+  // absorbent exhaustion (scripted shortly after dantrolene)
+  if(M.exhaustAt!==null&&M.t>=M.exhaustAt&&!M.canisterNew) M.fico2=Math.min(5.5,M.fico2+2.4*dt);
+  if(M.canisterNew) M.fico2=Math.max(0,M.fico2-4*dt);
+  // potassium
+  M.k=M.kTreated?Math.max(4.4,M.k-0.3*dt):Math.min(7.2,M.k+1.2*Math.max(0,M.mh-0.4)*dt);
+}
+function vitals(){
+  const mh=M.mh;
+  const hr=76+72*mh;
+  const sbp=124+20*Math.min(mh,0.6)-50*Math.max(0,mh-0.8);
+  const dbp=sbp*0.58;
+  const spo2=clamp(99-12*Math.max(0,mh-0.6)+(M.hyper?1:0),82,100);
+  const prod=45*mh*(M.hyper?0.62:1);
+  const etco2=37+prod+M.fico2*0.9;
+  const rr=M.hyper?22:(M.t>3&&M.trigger?14:12);
+  const pvc=(mh>0.85||M.k>6.2);
+  return{hr,sbp,dbp,map:(sbp+2*dbp)/3,spo2,etco2,fico2:M.fico2,rr,temp:M.temp,agent:M.agentEt,k:M.k,pvc,
+    fgf:M.flowHigh?'O2 12 L/min':(M.trigger?'O2 1 · Air 1 L/min':'O2 2 L/min'),vt:M.hyper?'Vt 520 · RR 22':'Vt 520 · RR '+rr};
+}
+
+/* ======================= Waveforms ======================= */
+const W={};
+function setupCanvas(id,color,lo,hi){const c=$(id);const o={c,ctx:c.getContext('2d'),color,lo,hi,x:0,last:null};W[id]=o;resize(o);return o}
+function resize(o){const r=o.c.getBoundingClientRect();const d=window.devicePixelRatio||1;o.c.width=Math.max(200,r.width*d);o.c.height=r.height*d;o.d=d;o.x=0;o.last=null;o.ctx.fillStyle='#050a0b';o.ctx.fillRect(0,0,o.c.width,o.c.height)}
+let phE=0,phR=0,pvcBeat=false,beatN=0;
+function ecgVal(p,pvc){
+  const g=(c,w,a)=>a*Math.exp(-((p-c)**2)/(2*w*w));
+  if(pvc) return g(0.28,0.05,-0.35)+g(0.36,0.035,1.1)+g(0.5,0.07,-0.45);
+  return g(0.12,0.025,0.12)+g(0.22,0.008,-0.12)+g(0.25,0.012,1)+g(0.28,0.01,-0.25)+g(0.47,0.045,0.25);
+}
+function plVal(p){return Math.max(0,Math.exp(-((p-0.24)**2)/0.008)*1+Math.exp(-((p-0.5)**2)/0.006)*0.35+(p>0.24?Math.exp(-(p-0.24)*3)*0.35:0))}
+function artVal(p){return 0.15+Math.exp(-((p-0.2)**2)/0.006)*0.85+Math.exp(-((p-0.45)**2)/0.004)*0.25+(p>0.2?Math.exp(-(p-0.2)*3.2)*0.3:0)}
+function co2Val(p,et,fi){
+  if(p<0.36)return fi;
+  if(p<0.43)return fi+(et*0.93-fi)*((p-0.36)/0.07);
+  if(p<0.94)return et*0.93+et*0.07*((p-0.43)/0.51);
+  return et-(et-fi)*((p-0.94)/0.06);
+}
+let lastFrame=null;
+function drawFrame(ts){
+  if(!running&&!animating){lastFrame=null;return}
+  const dt=lastFrame?Math.min(0.1,(ts-lastFrame)/1000):0;lastFrame=ts;
+  const v=vitals();
+  const n=Math.max(1,Math.ceil(dt/0.004)),h=dt/n; // sub steps so sharp QRS peaks are not skipped
+  for(let k=0;k<n;k++){
+    const prevE=phE;phE+=h*v.hr/60;
+    if(Math.floor(phE)!==Math.floor(prevE)){beatN++;pvcBeat=v.pvc&&(beatN%4===0)}
+    phR+=h*v.rr/60;
+    const pE=phE%1,pR=phR%1;
+    plot(W.cvEcg,ecgVal(pE,pvcBeat),h);
+    plot(W.cvArt,(v.dbp+(v.sbp-v.dbp)*artVal(pE))/180,h,true);
+    plot(W.cvPl,plVal(pE)*clamp((v.spo2-80)/20,0.25,1),h);
+    plot(W.cvCo2,co2Val(pR,v.etco2,v.fico2)/80,h,true);
+  }
+  requestAnimationFrame(drawFrame);
+}
+function plot(o,val,dt,abs){
+  const ctx=o.ctx,H=o.c.height,Wd=o.c.width,d=o.d;
+  const speed=110*d; // px per second
+  const nx=o.x+speed*dt;
+  const y=abs?H-6*d-val*(H-14*d):H*0.62-val*H*0.5;
+  ctx.fillStyle='#050a0b';ctx.fillRect(o.x,0,Math.min(14*d,Wd-o.x)+speed*dt,H);
+  if(o.last!==null&&dt>0){ctx.strokeStyle=o.color;ctx.lineWidth=2*d;ctx.lineJoin='round';ctx.beginPath();ctx.moveTo(o.x,o.last);ctx.lineTo(nx,y);ctx.stroke()}
+  o.x=nx;o.last=y;
+  if(o.x>=Wd){o.x=0;o.last=null}
+}
+
+/* ======================= Numeric display ======================= */
+function paint(){
+  const v=vitals();
+  $('vHR').textContent=Math.round(v.hr);$('sHR').textContent=v.pvc?'bpm · PVCs':'bpm';
+  $('vSp').textContent=Math.round(v.spo2);
+  $('vBP').textContent=Math.round(v.sbp)+'/'+Math.round(v.dbp);$('sBP').textContent='('+Math.round(v.map)+')';
+  $('vEt').textContent=Math.round(v.etco2);
+  $('vFi').textContent=Math.round(v.fico2);$('sRR').textContent='RR '+v.rr;
+  $('vT').textContent=v.temp.toFixed(1);
+  $('vAg').textContent=v.agent.toFixed(1);$('sAg').textContent='Fi '+(M.trigger?M.sevoDial.toFixed(1):'0.0')+' · MAC '+(v.agent/2.05).toFixed(1);
+  $('vVent').textContent=v.vt;$('sVent').textContent=v.fgf+(M.filters?' · charcoal filters':'');
+  const al=(id,c)=>$(id).classList.toggle('alarm',!!c);
+  al('tHR',v.hr>120||v.pvc);al('tSp',v.spo2<92);al('tBP',v.sbp<90);al('tEt',v.etco2>50);al('tFi',v.fico2>=2);al('tT',v.temp>=38.5);
+  $('clock').textContent=fmtT(M.t);
+}
+
+/* ======================= Team channel ======================= */
+const WHO={md:['Dr. Lane · Anesthesiologist','md'],crna:['Sam · CRNA','crna'],circ:['Jordan · Circulator','circ'],surg:['Dr. Ruiz · Surgeon','surg'],you:['You','you'],sys:['','sys']};
+function say(who,text){const [n,c]=WHO[who];const el=document.createElement('div');el.className='msg'+(who==='sys'?' sys':'');
+  el.innerHTML=(who==='sys'?'':`<span class="who ${c}">${n}<span class="when">${fmtT(M.t)}</span></span>`)+`<p>${text}</p>`;
+  const log=$('log');log.appendChild(el);log.scrollTop=log.scrollHeight;}
+
+/* ======================= Scoring ======================= */
+let score=0,ledger=[];
+function award(pts,label){score+=pts;ledger.push({t:M.t,pts,label});$('score').textContent=score}
+
+/* ======================= Scenario ======================= */
+/* Ambient lines fire on time. Calls pause the clock until answered. */
+const AMBIENT=[
+ {at:2.5,who:'crna',text:'Sevo is at 2. Everything looks smooth so far.'},
+ {at:5,who:'crna',text:'ETCO2 is drifting up. I\'m bumping the rate to 14.'},
+ {at:7.5,who:'surg',text:'Tourniquet isn\'t up yet and this leg already feels really tight. Is he paralyzed?'},
+ {at:9,who:'crna',text:'His jaw was stiff at intubation too, now that I think about it.'},
+];
+
+/* option.truth(v) is evaluated against the monitor when the call opens */
+const CALLS=[
+{id:'start',when:()=>true,who:'crna',text:'Tube is in and placement is confirmed. Go ahead and dial the sevoflurane to 2% for me.',
+ type:'single',q:'The CRNA asks you to start the volatile agent.',
+ opts:[{t:'Turn the sevoflurane vaporizer to 2%',ok:1,pts:5,fx:()=>{M.trigger=true;M.sevoDial=2},why:'Vaporizer on at 2%. Watch the monitor closely from here.'}]},
+
+{id:'recognize',when:()=>M.t>=10,who:'md',text:'I just walked in. Sam has bumped the rate and the CO2 is still climbing, and the surgeon says the leg is rigid. Tell me everything you\'re seeing on that monitor.',
+ type:'multi',q:'Select every finding that is TRUE right now. Wrong selections cost points.',
+ opts:[
+  {t:'ETCO2 is above 45 mmHg and climbing despite the rate increase',truth:v=>v.etco2>45,pts:10},
+  {t:'Heart rate is above 100 (tachycardia)',truth:v=>v.hr>100,pts:10},
+  {t:'FiCO2 is still 0, so this is not rebreathing; CO2 production is rising',truth:v=>v.fico2<1,pts:10},
+  {t:'Muscle rigidity is being reported by the team',truth:()=>true,pts:5},
+  {t:'Temperature is above 39 °C',truth:v=>v.temp>39,pts:10},
+  {t:'SpO2 has fallen below 90%',truth:v=>v.spo2<90,pts:10},
+  {t:'Heart rate is falling (bradycardia)',truth:v=>v.hr<60,pts:10},
+  {t:'ETCO2 is falling',truth:()=>false,pts:10}],
+ bonus:[{need:[0,2],pts:15,label:'Separated rising CO2 production from rebreathing (ETCO2 high, FiCO2 at 0)'},
+        {need:[0,1,3],pts:10,label:'Linked rising ETCO2, tachycardia and rigidity into one early picture'}],
+ teach:'Early MH: rising ETCO2 despite more ventilation, tachycardia, and rigidity. Temperature is normal here, which is expected. Temperature rise is a late sign.'},
+
+{id:'diagnose',when:()=>true,after:'recognize',who:'md',text:'Okay. What\'s your read on this?',
+ type:'single',q:'What is the most likely explanation?',
+ opts:[{t:'Malignant hyperthermia',ok:1,pts:20,why:'Right. A volatile agent and succinylcholine on board, rising CO2 production, tachycardia and rigidity: this is MH until proven otherwise.'},
+   {t:'Light anesthesia. Turn the sevoflurane up.',pts:-15,why:'Turning up a triggering agent would make MH worse. The CO2 rise and rigidity do not fit light anesthesia.'},
+   {t:'Exhausted absorbent. Change the canister.',pts:-5,why:'FiCO2 is 0. The patient is not rebreathing; the CO2 is being produced.'},
+   {t:'Hypoventilation. Increase the rate again.',pts:-5,why:'The rate was already increased and ETCO2 kept rising. Ventilation is not the root cause.'},
+   {t:'Sepsis',pts:-5,why:'A healthy patient minutes into an elective case, with rigidity after triggers, points to MH.'}]},
+
+{id:'first',when:()=>true,after:'diagnose',who:'md',text:'Agreed. I\'m calling it: MH. What do you do right now?',
+ type:'single',q:'Your first action:',
+ opts:[{t:'Call for help and bring the MH cart into the room',ok:1,pts:20,why:'Correct. Help and the cart come first. An MH crisis needs many hands, and dantrolene takes time to mix.'},
+   {t:'Swap out the anesthesia machine',pts:-10,cost:1,why:'An immediate machine swap is not necessary and delays treatment.'},
+   {t:'Start mixing dantrolene by yourself before telling anyone',pts:-5,cost:1,why:'Dantrolene matters, but working alone delays the response. Call for help and get the cart first.'},
+   {t:'Start ice packs',pts:-5,cost:1,why:'Cooling is part of treatment, but it is not the first step, and the temperature is not elevated yet.'}],
+ after_fx:()=>{say('circ','Calling the MH overhead page now. Cart is on its way.')}},
+
+{id:'machine',when:()=>true,after:'first',who:'md',text:'Help is coming. I\'m turning off the vaporizer. Set up the machine for me. What do you do?',
+ type:'multi',q:'Select every action you take at the anesthesia machine now.',
+ pre:()=>{M.trigger=false;M.sevoDial=0},
+ opts:[
+  {t:'Turn fresh gas O2 above 10 L/min',truth:()=>true,pts:10,fx:()=>M.flowHigh=true},
+  {t:'Set up to hyperventilate (increase minute ventilation)',truth:()=>true,pts:10,fx:()=>M.hyper=true},
+  {t:'Place activated charcoal filters on the inspiratory and expiratory limbs',truth:()=>true,pts:10,fx:()=>M.filters=true},
+  {t:'Confirm the vaporizer is off and remove it from the machine',truth:()=>true,pts:5},
+  {t:'Lower fresh gas flow to preserve the absorbent',truth:()=>false,pts:10},
+  {t:'Switch the vaporizer to desflurane',truth:()=>false,pts:15},
+  {t:'Swap out the anesthesia machine immediately',truth:()=>false,pts:5},
+  {t:'Give succinylcholine to relax the jaw',truth:()=>false,pts:15}],
+ bonus:[{need:[0,1,2],pts:10,label:'Set up high flow O2, hyperventilation and charcoal filters together'}],
+ teach:'High flow O2 and hyperventilation wash out agent and remove CO2. Charcoal filters speed agent removal. The machine does not need to be swapped during the crisis.',
+ after_fx:()=>{if(!M.flowHigh||!M.hyper){say('md','I\'ll get the flows and the rate up myself.');M.flowHigh=true;M.hyper=true}}},
+
+{id:'dant',when:()=>true,after:'machine',who:'crna',text:p=>`Cart's here. He's ${KG} kg. This cart has the older 20 mg dantrolene vials. Initial dose is 2.5 mg/kg. What do you mix?`,
+ type:'single',q:'How many vials, and what do you mix them with?',
+ opts:[{t:`${Math.ceil(KG*2.5/20)} vials, each with 60 mL sterile water`,ok:1,pts:25,why:`Correct. ${KG} × 2.5 = ${KG*2.5} mg. ${KG*2.5} ÷ 20 = ${(KG*2.5/20).toFixed(2)}, so ${Math.ceil(KG*2.5/20)} vials. Get extra hands: each vial takes time to dissolve.`},
+   {t:`${Math.ceil(KG*2.5/20)} vials, each with 60 mL bacteriostatic water`,pts:-10,cost:1,why:'Right count, wrong diluent. Dantrolene is mixed only with sterile water.'},
+   {t:`${Math.ceil(KG/20)} vials, each with 60 mL sterile water`,pts:-10,cost:1,why:`That is ${KG} mg, about 1 mg/kg. The order is 2.5 mg/kg.`},
+   {t:'1 vial with 5 mL sterile water',pts:-10,cost:1,why:'That is Ryanodex (250 mg in 5 mL). This cart has the older 20 mg vials.'}],
+ after_fx:()=>{M.dantAt=M.t+2;M.exhaustAt=M.t+2.5;say('crna','Mixing now. Circulator, grab two more people to help reconstitute.');}},
+
+{id:'rebreathe',when:()=>M.fico2>=2.6,who:'md',text:'Dantrolene is going in, but ETCO2 isn\'t coming down the way I want. Look at the capnogram. What\'s going on?',
+ type:'multi',q:'Select every finding that is TRUE right now.',
+ opts:[
+  {t:'ETCO2 is still above 45 mmHg',truth:v=>v.etco2>45,pts:5},
+  {t:'FiCO2 is not returning to 0; the patient is rebreathing CO2',truth:v=>v.fico2>=1,pts:10},
+  {t:'The absorbent is exhausted from the huge CO2 load',truth:()=>true,pts:10},
+  {t:'The capnogram baseline is returning to zero',truth:v=>v.fico2<1,pts:10},
+  {t:'This proves dantrolene has failed',truth:()=>false,pts:10},
+  {t:'The sample line is loose',truth:()=>false,pts:5}],
+ bonus:[{need:[0,1],pts:15,label:'Connected high ETCO2 with an FiCO2 that will not return to zero: rebreathing on top of MH'}],
+ teach:'MH produces so much CO2 that the absorbent can be used up quickly. When FiCO2 rises above zero, the patient is rebreathing.'},
+
+{id:'canister',when:()=>true,after:'rebreathe',who:'md',text:'So what do we do about it?',
+ type:'single',q:'Your action:',
+ opts:[{t:'Change the absorbent canister and keep fresh gas flows high',ok:1,pts:15,fx:()=>{M.canisterNew=true},why:'Correct. Fresh absorbent and high flows stop the rebreathing.'},
+   {t:'Lower the fresh gas flow',pts:-10,cost:1,why:'Lower flows increase rebreathing and slow agent washout.'},
+   {t:'Leave it. It will resolve once dantrolene works.',pts:-10,cost:1,why:'Rebreathed CO2 adds to the acidosis now. Fix it.'},
+   {t:'Swap out the anesthesia machine',pts:-5,cost:1,why:'Not necessary. Changing the canister fixes the problem.'}]},
+
+{id:'cool',when:()=>M.temp>=38.6,who:'circ',text:()=>`Esophageal temp just hit ${M.temp.toFixed(1)}.`,
+ type:'multi',q:'Select every cooling measure you set up.',
+ opts:[
+  {t:'Ice packs to the groin, axillae and neck',truth:()=>true,pts:5},
+  {t:'Cold IV normal saline',truth:()=>true,pts:5},
+  {t:'Cold saline lavage of body cavities as directed (for example, NG)',truth:()=>true,pts:5},
+  {t:'Turn the forced air warmer up',truth:()=>false,pts:10},
+  {t:'Warm the IV fluids',truth:()=>false,pts:10}],
+ teach:'Active cooling starts once temperature climbs. Know the temperature where it stops.',
+ after_fx:()=>{M.cooling=true}},
+
+{id:'abg',when:()=>M.dantAt!==null&&M.t>=M.dantAt+3,who:'md',text:()=>{const v=vitals();return `ABG is back: pH 7.14, PaCO2 ${Math.round(v.etco2+6)}, HCO3 17, K+ ${v.k.toFixed(1)}. And Jordan says the Foley just drained dark, cola colored urine. What does this tell us?`},
+ type:'multi',q:'Select every interpretation that is TRUE.',
+ opts:[
+  {t:'Combined respiratory and metabolic acidosis',truth:()=>true,pts:10},
+  {t:'Hyperkalemia',truth:()=>M.k>5.2,pts:10},
+  {t:'Cola colored urine suggests myoglobin from muscle breakdown',truth:()=>true,pts:10},
+  {t:'Metabolic alkalosis',truth:()=>false,pts:10},
+  {t:'The urine color is from the cold saline',truth:()=>false,pts:5}],
+ bonus:[{need:[0,1,2],pts:10,label:'Tied the acidosis, high potassium and dark urine to muscle breakdown'}]},
+
+{id:'drugs',when:()=>true,after:'abg',who:'md',text:'Hand me what I need from the cart.',
+ type:'single',q:'Which cart drugs do you hand over?',
+ opts:[{t:`Sodium bicarbonate ${KG} to ${KG*2} mEq (1 to 2 mEq/kg) and calcium chloride for the hyperkalemia`,ok:1,pts:20,fx:()=>{M.kTreated=true},why:'Correct. Bicarbonate treats the metabolic acidosis and hyperkalemia; calcium chloride protects the heart from the high potassium.'},
+   {t:`Sodium bicarbonate ${KG*10} mEq`,pts:-10,cost:0.5,why:'Ten times too much. The dose is 1 to 2 mEq/kg.'},
+   {t:'Potassium chloride',pts:-20,cost:0.5,why:'Potassium is already dangerously high.'},
+   {t:'Another dose of succinylcholine',pts:-20,cost:0.5,why:'Succinylcholine is a trigger and raises potassium.'}]},
+
+{id:'stopcool',when:()=>M.cooling&&M.temp<=38.1,who:'circ',text:()=>`Temp is down to ${M.temp.toFixed(1)}.`,
+ type:'single',q:'What do you do with the cooling measures?',
+ opts:[{t:'Stop active cooling now',ok:1,pts:15,fx:()=>{M.cooling=false},why:'Correct. Stop active cooling at 38 °C to avoid overshooting into hypothermia.'},
+   {t:'Keep cooling until 37 °C',pts:-10,cost:1,why:'Continuing past 38 °C risks hypothermia.'},
+   {t:'Keep cooling until 36 °C',pts:-10,cost:1,why:'That is hypothermia. Stop at 38 °C.'}]},
+
+{id:'after',when:()=>M.mh<0.35&&M.temp<38.4&&done.drugs&&done.canister&&(!done.cool||done.stopcool),who:'md',text:'ETCO2 and heart rate are coming down. Can we wrap up dantrolene and send him to PACU?',
+ type:'single',q:'Your recommendation:',
+ opts:[{t:'Keep monitoring closely, be ready to repeat dantrolene if signs return, and plan ICU admission',ok:1,pts:15,why:'Correct. MH can recur after it seems controlled. Close ICU monitoring and repeat dantrolene as needed.'},
+   {t:'Yes. The crisis is over; extubate and go to PACU.',pts:-15,cost:0,why:'MH can recur after initial control. The patient needs ICU level monitoring.'},
+   {t:'Restart sevoflurane at a lower dose to finish the case',pts:-20,cost:0,why:'Never reintroduce a trigger.'}]}
+];
+
+/* ======================= Engine ======================= */
+let running=false,animating=false,speed=1,done={},current=null,simTimer=null,lastTick=null,name='',ambI=0,finished=false;
+const SEC_PER_MIN=3;
+const MAX_SCORE=335; // every correct finding, action and bonus on the ideal path // real seconds per case minute at 1x
+function begin(){
+  M=freshModel();score=0;ledger=[];done={};current=null;ambI=0;finished=false;$('score').textContent='0';$('log').innerHTML='';
+  ['cvEcg','cvArt','cvPl','cvCo2'].forEach(id=>W[id]&&resize(W[id]));
+  say('sys','OR 6. Induction complete with propofol and succinylcholine. Ventilator running, vaporizer off.');
+  animating=true;requestAnimationFrame(drawFrame);
+  paint();openCall(CALLS[0]);
+  simTimer=setInterval(tick,100);
+}
+function tick(){
+  const now=performance.now();const dtReal=lastTick?(now-lastTick)/1000:0;lastTick=now;
+  if(!running||current||finished){$('status').className='status '+(current?'wait':'');$('status').textContent=current?'Team waiting on you':(finished?'Case ended':'Paused');paint();return}
+  $('status').className='status run';$('status').textContent='Case running';
+  step(dtReal*speed/SEC_PER_MIN);
+  while(ambI<AMBIENT.length&&M.t>=AMBIENT[ambI].at){const a=AMBIENT[ambI++];say(a.who,a.text)}
+  paint();
+  for(const c of CALLS){if(done[c.id])continue;if(c.after&&!done[c.after])continue;if(c.when()){openCall(c);break}}
+  if(done.after&&!finished){finished=true;setTimeout(finish,2500)}
+  if(M.t>70&&!finished){finished=true;say('sys','The case has run long without the crisis under control.');setTimeout(finish,2500)}
+}
+function openCall(c){
+  current=c;if(c.pre)c.pre();
+  const txt=typeof c.text==='function'?c.text():c.text;say(c.who,txt);
+  const v=vitals();const opts=c.opts.map((o,i)=>({...o,i,truthNow:c.type==='multi'?!!o.truth(v):!!o.ok}));
+  const shuffled=c.id==='start'?opts:opts.slice().sort(()=>Math.random()-0.5);
+  const box=$('call');box.className='call';
+  box.innerHTML=`<span class="label">${WHO[c.who][0]} is asking</span><p class="q">${c.q}</p><div class="choices"></div><div class="out"></div>`;
+  const ch=box.querySelector('.choices');const sel=new Set();
+  shuffled.forEach(o=>{const b=document.createElement('button');b.type='button';b.className='ch'+(c.type==='single'?' single':'');b.dataset.i=o.i;
+    b.innerHTML=`<span class="box"></span><span class="tx">${o.t}</span>`;
+    b.onclick=()=>{if(c.type==='single'){answerSingle(c,o,b)}else{if(sel.has(o.i)){sel.delete(o.i);b.classList.remove('on');b.querySelector('.box').textContent=''}else{sel.add(o.i);b.classList.add('on');b.querySelector('.box').textContent='✓'}}};
+    ch.appendChild(b)});
+  if(c.type==='multi'){const sb=document.createElement('button');sb.className='btn';sb.type='button';sb.textContent='Report to the team';sb.onclick=()=>answerMulti(c,opts,sel,box);box.querySelector('.out').appendChild(sb)}
+  box.querySelector('.ch')?.focus({preventScroll:true});
+}
+function answerSingle(c,o,b){
+  const box=$('call');const out=box.querySelector('.out');
+  if(o.ok){
+    b.classList.add('good');box.querySelectorAll('.ch').forEach(x=>x.disabled=true);
+    const tries=c._tries||0;const pts=Math.max(Math.round(o.pts*(tries?0.5:1)),0);
+    award(pts,c.q.replace(/[.:?]+$/,'')+': '+o.t);
+    say('you',o.t);if(o.fx)o.fx();
+    out.innerHTML=`<div class="fb"><p><span class="pt pos">+${pts}</span> ${o.why}</p></div>`;
+    const nb=document.createElement('button');nb.className='btn';nb.type='button';nb.textContent='Continue';nb.onclick=()=>closeCall(c);out.querySelector('.fb').appendChild(nb);nb.focus({preventScroll:true});
+  }else{
+    b.classList.add('bad');b.disabled=true;c._tries=(c._tries||0)+1;
+    award(o.pts,'Chose: '+o.t);say('you',o.t);
+    if(o.cost){step(o.cost);paint()}
+    out.innerHTML=`<div class="fb neg"><p><span class="pt neg">${o.pts}</span> ${o.why}${o.cost?' The patient got worse while you worked on that.':''}</p><p>Choose again.</p></div>`;
+  }
+}
+function answerMulti(c,opts,sel,box){
+  let gained=0;const picked=[...sel];
+  box.querySelectorAll('.ch').forEach(b=>{b.disabled=true;const o=opts[+b.dataset.i];const on=sel.has(o.i);
+    let tag='';
+    if(on&&o.truthNow){b.classList.add('good');gained+=o.pts;tag=`<span class="pts pos">+${o.pts}</span>`;if(o.fx)o.fx()}
+    else if(on&&!o.truthNow){b.classList.add('bad');gained-=o.pts;tag=`<span class="pts neg">−${o.pts}</span>`}
+    else if(!on&&o.truthNow){b.classList.add('miss');tag=`<span class="pts" style="color:var(--muted)">missed</span>`}
+    b.querySelector('.tx').insertAdjacentHTML('beforeend',tag)});
+  const correctPicked=opts.filter(o=>sel.has(o.i)&&o.truthNow).length,wrong=opts.filter(o=>sel.has(o.i)&&!o.truthNow).length,missed=opts.filter(o=>!sel.has(o.i)&&o.truthNow).length;
+  award(gained,`${c.q.split('.')[0].replace(/[.:?]+$/,'')}: ${correctPicked} correct, ${wrong} wrong, ${missed} missed`);
+  let bonusHtml='';
+  (c.bonus||[]).forEach(bn=>{if(bn.need.every(i=>sel.has(i)&&opts[i].truthNow)&&wrong===0){award(bn.pts,'Bonus: '+bn.label);bonusHtml+=`<p><span class="pt pos">+${bn.pts} bonus</span> ${bn.label}.</p>`}});
+  say('you',picked.length?opts.filter(o=>sel.has(o.i)).map(o=>o.t).join('; ')+'.':'I\'m not sure.');
+  const out=box.querySelector('.out');
+  out.innerHTML=`<div class="fb${gained<0?' neg':''}"><p><span class="pt ${gained<0?'neg':'pos'}">${gained>=0?'+':''}${gained}</span> ${correctPicked} correct, ${wrong} wrong, ${missed} missed. Dashed boxes are true findings you did not report.</p>${bonusHtml}${c.teach?`<p>${c.teach}</p>`:''}</div>`;
+  const nb=document.createElement('button');nb.className='btn';nb.type='button';nb.textContent='Continue';nb.onclick=()=>closeCall(c);out.querySelector('.fb').appendChild(nb);nb.focus({preventScroll:true});
+}
+function closeCall(c){done[c.id]=true;current=null;if(c.after_fx)c.after_fx();
+  const box=$('call');box.className='call idle';box.innerHTML='<span class="label">Monitor</span><p class="q">Keep watching the monitor. The team will call on you.</p>';
+  if(c.id==='start')running=true;}
+
+function finish(){
+  running=false;clearInterval(simTimer);animating=false;
+  let best=null;try{best=JSON.parse(localStorage.getItem('mhSim.best')||'null')}catch(e){}
+  const isBest=!best||score>best.score;if(isBest){best={name,score,date:new Date().toLocaleDateString()};try{localStorage.setItem('mhSim.best',JSON.stringify(best))}catch(e){}}
+  const pos=ledger.filter(l=>l.pts>0).reduce((a,l)=>a+l.pts,0),neg=ledger.filter(l=>l.pts<0).reduce((a,l)=>a+l.pts,0);
+  const d=$('debrief');
+  d.innerHTML=`<span class="label">Debrief · ${name}</span><h1>Patient transferred to the ICU</h1>
+  <div class="scorebig"><div><span class="label">Final score · ${MAX_SCORE} possible</span><div class="v">${score}</div></div>
+  <div><span class="label">Points earned</span><div class="mono pos" style="font-size:22px;font-weight:700">+${pos}</div></div>
+  <div><span class="label">Points lost</span><div class="mono neg" style="font-size:22px;font-weight:700">${neg}</div></div>
+  <div><span class="label">Case time</span><div class="mono" style="font-size:22px;font-weight:700">${fmtT(M.t)}</div></div>
+  <div><span class="label">${isBest?'New best on this device':'Best on this device'}</span><div class="mono" style="font-size:22px;font-weight:700">${best.score} · ${best.name||'—'}</div></div></div>
+  <div class="panel"><span class="label">What the expected response looks like</span><ul>
+   <li>Recognize the early picture: rising ETCO2 despite more ventilation, tachycardia and rigidity, with FiCO2 at 0. Temperature rises late.</li>
+   <li>Call for help and the MH cart, stop triggers, high flow O2 above 10 L/min, hyperventilate, charcoal filters.</li>
+   <li>Dantrolene 2.5 mg/kg; older vials are 20 mg each with 60 mL sterile water.</li>
+   <li>Watch for absorbent exhaustion: ETCO2 high with FiCO2 above zero means rebreathing. Change the canister.</li>
+   <li>Treat acidosis and hyperkalemia; cool, and stop active cooling at 38 °C; ICU monitoring for recurrence.</li></ul></div>
+  <div class="tblwrap"><table class="tl"><thead><tr><th>Case time</th><th>Decision</th><th style="text-align:right">Points</th></tr></thead><tbody>
+  ${ledger.map(l=>`<tr><td class="t">${fmtT(l.t)}</td><td>${l.label}</td><td class="p ${l.pts<0?'neg':'pos'}">${l.pts>0?'+':''}${l.pts}</td></tr>`).join('')}
+  </tbody></table></div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" id="againBtn" type="button">Run the scenario again</button></div>`;
+  $('sim').hidden=true;d.hidden=false;window.scrollTo({top:0});
+  $('againBtn').onclick=()=>{d.hidden=true;$('sim').hidden=false;begin()};
+}
+
+/* ======================= Wire up ======================= */
+setupCanvas('cvEcg','#5ee08a');setupCanvas('cvArt','#ff7a6b');setupCanvas('cvPl','#4fd1e8');setupCanvas('cvCo2','#f2c94c');
+window.addEventListener('resize',()=>Object.values(W).forEach(resize));
+try{const b=JSON.parse(localStorage.getItem('mhSim.best')||'null');if(b)$('bestLine').textContent=`Best score on this device: ${b.score} (${b.name||'unnamed'}, ${b.date})`}catch(e){}
+$('startForm').addEventListener('submit',e=>{e.preventDefault();name=$('nameIn').value.trim()||'Student';$('intro').hidden=true;$('sim').hidden=false;
+  requestAnimationFrame(()=>{Object.values(W).forEach(resize);begin()})});
+$('speedBtn').onclick=()=>{speed=speed===1?2:1;$('speedBtn').textContent='Speed '+speed+'×'};
+M=freshModel();paint();
+</script>
+
+</body>
+</html>
